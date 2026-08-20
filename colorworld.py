@@ -12,10 +12,10 @@ class ColorWorldEnvironment(SimulatedEnvironment):
         super(ColorWorldEnvironment, self).__init__()
         self._width = width
         self._height = height
-        self._agents_colors = {}                #maps agent id with its color
-        self._agents_locations = {}             #maps agent id with its location (x, y)
-        self._location_colors = {}              #maps location with the color present in that location
-        self._active_trails = {}                #maps agent id with the trail color it has active. trail list
+        self._agents_colors = {}                #maps agent id with its color: {id:color}
+        self._agents_locations = {}             #maps agent id with its location (x, y): {id:(x, y)}
+        self._location_colors = {}              #maps location with the color present in that location: {(x, y): color}
+        self._active_trails = {}                #maps agent id with the trail color it has active {id:(x, y)}. trail list
 
     def add(self, agent_id: int, color: str = "", coords: tuple = (0, 0)) -> None:
         if not (0 <= coords[0] < self._width and 0 <= coords[1] < self._height):
@@ -27,8 +27,13 @@ class ColorWorldEnvironment(SimulatedEnvironment):
 
     def remove(self, agent_id: int) -> None:
         super(ColorWorldEnvironment, self).remove(agent_id)
+        agent_color = self._agents_colors.get(agent_id)
         self._agents_locations.pop(agent_id, None)
         self._agents_colors.pop(agent_id, None)
+        for location, color in list(self._location_colors.items()):
+            if color == agent_color:
+                self._location_colors.pop(location, None)
+        self._active_trails.pop(agent_id, None)
 
     def add_statebuffer(self, agent_id: int, statebuffer: IStateBuffer) -> None:
         super(ColorWorldEnvironment, self).add_statebuffer(agent_id, statebuffer)
@@ -51,7 +56,7 @@ class ColorWorldEnvironment(SimulatedEnvironment):
             return "wall"                                               # Return "wall" for out-of-bounds locations
         return self._location_colors.get(location, "none")
     
-    def is_color_in_location(self, location: tuple, color: str) -> bool:
+    def _is_color_in_location(self, location: tuple, color: str) -> bool:
         return self._location_color(location) == color
     
     def _get_local_grid(self, agent_id: int, radius: int = 4) -> dict: #maps location color for a 9x9 grid centered around the agent
