@@ -35,14 +35,19 @@ class ColorWorldEnvironment(SimulatedEnvironment):
                 self._location_colors.pop(location, None)
         self._active_trails.pop(agent_id, None)
 
+    def _board_state(self) -> dict:
+        return {
+            "width": self._width,
+            "height": self._height,
+            "location_colors": self._location_colors.copy(),
+            "agents_locations": self._agents_locations.copy(),
+            "agents_colors": self._agents_colors.copy(),
+            "active_trails": {a_id: list(trail) for a_id, trail in self._active_trails.items()}
+        }
+
     def add_statebuffer(self, agent_id: int, statebuffer: IStateBuffer) -> None:
         super(ColorWorldEnvironment, self).add_statebuffer(agent_id, statebuffer)
-        statebuffer.update({"width": self._width, 
-                            "height": self._height, 
-                            "agent_location": self._agents_locations.get(agent_id),
-                            "agent_color": self._agents_colors.get(agent_id),
-                            "location_color": self._location_color(self._agents_locations.get(agent_id))
-                            })
+        statebuffer.update(self._board_state())
 
     def remove_statebuffer(self, agent_id: int,statebuffer: IStateBuffer) -> None:
         super(ColorWorldEnvironment, self).remove_statebuffer(agent_id, statebuffer)
@@ -158,17 +163,13 @@ class ColorWorldEnvironment(SimulatedEnvironment):
             if action_method:
                 args = [agent_id] + [params.get(param) for param in expected_params]
                 action_method(*args)
-                self._update_statebuffers(agent_id)
+                self._update_statebuffers()
             else:
                 print(f"Invalid action: {action_name}")
         else:
             raise ValueError("Agent with id {} not found in the environment.".format(agent_id))
     
-    def _update_statebuffers(self, agent_id: int) -> None:
-        relevant_statebuffers = [entry["statebuffer"] for entry in self._statebuffers if entry["agent_id"] == agent_id]
-        for statebuffer in relevant_statebuffers:
-            statebuffer.update({"height": self._height, 
-                                "width": self._width, 
-                                "agent_location": self._location_of(agent_id),
-                                "agent_color": self._agents_colors.get(agent_id), 
-                                "location_color": self._location_color(self._location_of(agent_id))})
+    def _update_statebuffers(self) -> None:
+        state = self._board_state()
+        for item in self._statebuffers:
+            item["statebuffer"].update(state)
