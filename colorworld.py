@@ -115,22 +115,36 @@ class ColorWorldEnvironment(SimulatedEnvironment):
                     if location not in my_trail:
                         my_trail.append(location)
                         self._active_trails[agent_id] = my_trail
+
+    def _trail_collision(self, agent_id: int, location: tuple) -> None:
+        for other_agent_id, trail in list(self._active_trails.items()):
+            if other_agent_id != agent_id and location in trail:
+                self.remove(other_agent_id)
+
+    def _agent_collision(self, agent_id: int, location: tuple) -> bool:
+        for other_agent_id, other_location in list(self._agents_locations.items()):
+            if other_agent_id != agent_id and other_location == location:
+                self.remove(agent_id)
+                return True
+        return False
    
     def _handle_move(self, agent_id: int, direction: str) -> None:
-        if direction == "left":
-            self._move_agent_left(agent_id)
-            self._paint_location(agent_id)
-        elif direction == "right":
-            self._move_agent_right(agent_id)
-            self._paint_location(agent_id)
-        elif direction == "up":
-            self._move_agent_up(agent_id)
-            self._paint_location(agent_id)
-        elif direction == "down":
-            self._move_agent_down(agent_id)
-            self._paint_location(agent_id)
-        else:
+        move_methods = {
+            "left": self._move_agent_left,
+            "right": self._move_agent_right,
+            "up": self._move_agent_up,
+            "down": self._move_agent_down,
+        }
+        move_method = move_methods.get(direction)
+        if move_method is None:
             print(f"Invalid direction: {direction}")
+            return
+        move_method(agent_id)
+        location = self._location_of(agent_id)
+        if self._agent_collision(agent_id, location):
+            return
+        self._trail_collision(agent_id, location)
+        self._paint_location(agent_id)
 
     def _move_agent_left(self, agent_id: int):
         current_location = self._location_of(agent_id)
