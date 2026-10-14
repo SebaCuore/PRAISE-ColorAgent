@@ -16,7 +16,7 @@ class ColorWorldEnvironment(SimulatedEnvironment):
         self._agents_locations = {}             #maps agent id with its location (x, y): {id:(x, y)}
         self._location_colors = {}              #maps location with the color present in that location: {(x, y): color}
         self._active_trails = {}                #maps agent id with the trail color it has active {id:(x, y)}. trail list
-        self._spawns = [(0,0), (width-1,0), (0,height-1), (width-1,height-1)]                       #maps available spawns locations
+        self._spawns = [(0,0), (width-1,0), (0,height-1), (width-1,height-1)]                       #available spawns locations
 
     def add(self, agent_id: int, color: str = "") -> None:
         if not self._spawns:
