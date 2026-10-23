@@ -27,9 +27,10 @@ def render_thread(renderer):
 if __name__ == '__main__':
     env = VacuumEnvironment(3, True)
     agent = VacuumAgent(env)
-    renderer = ConsoleRenderer()
+    renderer = PyGameRenderer()
+    statebuffer = StateBuffer(agent.id)
 
-    statebuffer = StateBuffer(agent.id, env)
+    env.add_statebuffer(agent.id, statebuffer)
     renderer.observe(statebuffer=statebuffer)
 
     print(agent.id)

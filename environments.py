@@ -23,6 +23,7 @@ class SimulatedEnvironment(metaclass=ABCMeta):
         if agent_id in self._agents:
             self._statebuffers.remove(statebuffer)
 
+
     @abstractmethod
     def get_property(self, agent_id: int, property_name: str) -> dict:
         pass
