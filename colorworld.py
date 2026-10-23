@@ -2,9 +2,10 @@ from statebuffer import IStateBuffer
 from environments import SimulatedEnvironment
 
 class ColorWorldEnvironment(SimulatedEnvironment):
-    def __new__(cls, width: int, height: int):
-        if width <= 0 or height <= 0:
-            raise ValueError
+
+    def __new__(cls, width: int, height:int):
+        if width < 4 or height < 4:
+            raise ValueError("The board must be at least 4x4")
         else:
             return super().__new__(cls)
 
@@ -13,28 +14,59 @@ class ColorWorldEnvironment(SimulatedEnvironment):
         self._width = width
         self._height = height
         self._agents_colors = {}                #maps agent id with its color: {id:color}
-        self._agents_locations = {}             #maps agent id with its location (x, y): {id:(x, y)}
+        self._agents_locations = {}             #maps agent id with its current location (x, y): {id:(x, y)}
         self._location_colors = {}              #maps location with the color present in that location: {(x, y): color}
-        self._active_trails = {}                #maps agent id with the trail color it has active {id:(x, y)}. trail list
-        self._spawns = [(0,0), (width-1,0), (0,height-1), (width-1,height-1)]                       #available spawns locations
+        self._active_trails = {}                #maps agent id with the trail color it has active {id:[(x, y),...]}. trail list
+        self._spawns = {(0,0): None, (width-1,0): None, (0,height-1): None, (width-1,height-1): None}    # {(x, y): agent_id or None}
+        self._agents_status = {}                #maps agent id with the current status: {id: True = alive}
 
-    def add(self, agent_id: int, color: str = "") -> None:
-        if not self._spawns:
+    def add(self, agent_id: int, color: str) -> None:
+        if None not in self._spawns.values():
             raise RuntimeError("Max agents reached")
+        if not color:
+            raise ValueError("The color must have a value")
+        if color == "none":
+            raise ValueError("The name of the color cannot be none")
+        if color in self._agents_colors.values():
+            raise ValueError(f"The color '{color}' is already used by another agent")
         super(ColorWorldEnvironment, self).add(agent_id)
-        self._agents_locations[agent_id] = self._spawns.pop()
+        for coord in self._spawns:
+            if self._spawns[coord] is None:
+                self._spawns[coord] = agent_id
+                self._agents_locations[agent_id] = coord
+                break
         self._agents_colors[agent_id] = color
         self._initial_zone(agent_id)
+        self._agents_status[agent_id] = True
 
     def remove(self, agent_id: int) -> None:
         super(ColorWorldEnvironment, self).remove(agent_id)
+        #agent_color = self._agents_colors.get(agent_id)
+        #self._agents_locations.pop(agent_id, None)
+        self._agents_colors.pop(agent_id, None)
+        #for location, color in list(self._location_colors.items()):
+        #    if color == agent_color:
+        #        self._location_colors.pop(location, None)
+        #self._active_trails.pop(agent_id, None)
+        #self._agents_status[agent_id] = False
+        for spw in self._spawns:
+            if self._spawns[spw] == agent_id:
+                self._spawns[spw] = None
+        #self._agents_status[agent_id] = False
+        self._agents_status.pop(agent_id, None)
+
+    def _clear_board(self, agent_id: int) -> None:
         agent_color = self._agents_colors.get(agent_id)
         self._agents_locations.pop(agent_id, None)
-        self._agents_colors.pop(agent_id, None)
         for location, color in list(self._location_colors.items()):
             if color == agent_color:
                 self._location_colors.pop(location, None)
         self._active_trails.pop(agent_id, None)
+
+    def _defeat(self, agent_id: int) -> None:
+        self._clear_board(agent_id)
+        self._agents_status[agent_id] = False
+
 
     def _board_state(self) -> dict:
         return {
@@ -43,8 +75,12 @@ class ColorWorldEnvironment(SimulatedEnvironment):
             "location_colors": self._location_colors.copy(),
             "agents_locations": self._agents_locations.copy(),
             "agents_colors": self._agents_colors.copy(),
-            "active_trails": {a_id: list(trail) for a_id, trail in self._active_trails.items()}
+            "active_trails": {a_id: list(trail) for a_id, trail in self._active_trails.items()},
+            "agents_status": self._agents_status.copy()
         }
+
+    def _board_state_agent(self, agent_id: int):
+        return self._board_state()  # Refactorizar para local
 
     def add_statebuffer(self, agent_id: int, statebuffer: IStateBuffer) -> None:
         super(ColorWorldEnvironment, self).add_statebuffer(agent_id, statebuffer)
@@ -54,7 +90,7 @@ class ColorWorldEnvironment(SimulatedEnvironment):
         super(ColorWorldEnvironment, self).remove_statebuffer(agent_id, statebuffer)
 
     def _location_of(self, agent_id: int) -> tuple:
-        return self._agents_locations[agent_id] if agent_id in self._agents_locations else None
+        return self._agents_locations.get(agent_id)
     
     def _location_color(self, location: tuple) -> str:
         x, y = location
@@ -64,15 +100,15 @@ class ColorWorldEnvironment(SimulatedEnvironment):
     
     def _is_color_in_location(self, location: tuple, color: str) -> bool:
         return self._location_color(location) == color
-    
-    def _get_local_grid(self, agent_id: int, radius: int = 4) -> dict: #maps location color for a 9x9 grid centered around the agent
-        x, y = self._location_of(agent_id)
-        grid = {}
-        for i in range(-radius, radius + 1):
-            for j in range(-radius, radius + 1):
-                location = (x + i, y + j)
-                grid[location] = self._location_color(location)
-        return grid
+
+    # def _get_local_grid(self, agent_id: int, radius: int = 4) -> dict: #maps location color for a 9x9 grid centered around the agent
+    #     x, y = self._location_of(agent_id)
+    #     grid = {}
+    #     for i in range(-radius, radius + 1):
+    #         for j in range(-radius, radius + 1):
+    #             location = (x + i, y + j)
+    #             grid[location] = self._location_color(location)
+    #     return grid
 
     def _initial_zone(self, agent_id: int) -> None:
         x, y = self._location_of(agent_id)
@@ -83,13 +119,24 @@ class ColorWorldEnvironment(SimulatedEnvironment):
                 if 0 <= cx < self._width and 0 <= cy < self._height:
                     self._location_colors[(cx, cy)] = color
 
+    def _get_board(self, agent_id: int) -> dict:
+        return self._board_state()
+
+    def _get_board_agent(self, agent_id: int) -> dict:
+        return self._board_state_agent(agent_id)
+
+    def _get_status(self, agent_id: int) -> bool:
+        return self._agents_status[agent_id]
+
     def get_property(self, agent_id: int, property_name: str) -> dict:
         if agent_id in self._agents:
             response = {"agent": agent_id}
 
             property_methods = {
                 "location": self._location_of,
-                "local_grid": self._get_local_grid,
+                #"local_grid": self._get_local_grid,
+                "board": self._get_board_agent,
+                "status": self._get_status
             }
 
             property_method = property_methods.get(property_name)
@@ -99,33 +146,36 @@ class ColorWorldEnvironment(SimulatedEnvironment):
 
             return response
         else:
-            raise ValueError("Agent with id {} not found in the environment.".format(agent_id))    
+            raise ValueError(f"Agent with id {agent_id} not found in the environment.")
 
     def _paint_location(self, agent_id: int) -> None:
-            location = self._location_of(agent_id)
-            color_agent = self._agents_colors.get(agent_id)
-            if 0 <= location[0] < self._width and 0 <= location[1] < self._height:
-                if self._location_color(location) == color_agent:
-                    my_trail = self._active_trails.get(agent_id, [])
-                    if len(my_trail) > 0:
-                        for cord in my_trail:
-                            self._location_colors[cord] = color_agent
-                        self._active_trails[agent_id] = []
-                else:
-                    my_trail = self._active_trails.get(agent_id, [])
-                    if location not in my_trail:
-                        my_trail.append(location)
-                        self._active_trails[agent_id] = my_trail
+        location = self._location_of(agent_id)
+        color_agent = self._agents_colors.get(agent_id)
+        if 0 <= location[0] < self._width and 0 <= location[1] < self._height:
+            if self._location_color(location) == color_agent:
+                my_trail = self._active_trails.get(agent_id, [])
+                if len(my_trail) > 0:
+                    for cord in my_trail:
+                        self._location_colors[cord] = color_agent
+                    self._active_trails[agent_id] = []
+            else:
+                my_trail = self._active_trails.get(agent_id, [])
+                if location not in my_trail:
+                    my_trail.append(location)
+                self._active_trails[agent_id] = my_trail
 
     def _trail_collision(self, agent_id: int, location: tuple) -> None:
         for other_agent_id, trail in list(self._active_trails.items()):
             if other_agent_id != agent_id and location in trail:
-                self.remove(other_agent_id)
+                #self.remove(other_agent_id)
+                self._defeat(other_agent_id)
+
 
     def _agent_collision(self, agent_id: int, location: tuple) -> bool:
         for other_agent_id, other_location in list(self._agents_locations.items()):
             if other_agent_id != agent_id and other_location == location:
-                self.remove(agent_id)
+                #self.remove(agent_id)
+                self._defeat(agent_id)
                 return True
         return False
    
@@ -169,20 +219,22 @@ class ColorWorldEnvironment(SimulatedEnvironment):
 
     def take_action(self, agent_id: int, action_name: str, params: dict = {}) -> None:
         if agent_id in self._agents:
-            action_methods = {
-                "move": (self._handle_move, ["direction"]),
-                #"paint": (self._paint_location, []),
-            }
+            if self._agents_status[agent_id]:
+                action_methods = {
+                    "move": (self._handle_move, ["direction"]),
+                }
 
-            action_method, expected_params = action_methods.get(action_name, (None, None))
-            if action_method:
-                args = [agent_id] + [params.get(param) for param in expected_params]
-                action_method(*args)
-                self._update_statebuffers()
+                action_method, expected_params = action_methods.get(action_name, (None, None))
+                if action_method:
+                    args = [agent_id] + [params.get(param) for param in expected_params]
+                    action_method(*args)
+                    self._update_statebuffers()
+                else:
+                    print(f"Invalid action: {action_name}")
             else:
-                print(f"Invalid action: {action_name}")
+                return
         else:
-            raise ValueError("Agent with id {} not found in the environment.".format(agent_id))
+            raise ValueError(f"Agent with id {agent_id} not found in the environment.")
     
     def _update_statebuffers(self) -> None:
         state = self._board_state()
